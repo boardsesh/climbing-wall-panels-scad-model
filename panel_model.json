@@ -1,0 +1,17 @@
+{
+    "fileFormatVersion": "1",
+    "parameterSets": {
+        "New set 1": {
+            "angle_indicator_length": "50",
+            "angle_indicator_width": "1.5",
+            "col_count": "27",
+            "mm_per_cm": "10",
+            "mm_per_inch": "25.399999999999999",
+            "panel_height": "1525",
+            "panel_thickness": "18",
+            "panel_width": "3050",
+            "text_depth": "1",
+            "text_size": "6"
+        }
+    }
+}
