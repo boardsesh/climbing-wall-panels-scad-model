@@ -14,12 +14,13 @@ mm_per_cm = 10;
 mm_per_inch = 25.4;
 
 // Full climbing wall dimensions
-full_width = 10 * 12 * mm_per_inch;   // 10ft in mm (3048mm)
+full_width = 3600;                    // Expanded width (3600mm)
 full_height = 12 * 12 * mm_per_inch;  // 12ft in mm (3657.6mm)
 
-// Panel dimensions
-panel_width = 3050;      // Actual width of Birch Ply panels (3050mm)
-panel_height = 1525;     // Actual height of Birch Ply panels (1525mm)
+// Panel dimensions (mounted sideways/landscape)
+panel_width = 2440;      // Width when mounted sideways (2440mm)
+panel_height = 1220;     // Height when mounted sideways (1220mm)
+half_panel_width = 1220; // Half sheet width for alternating layout
 kicker_height = 10 * mm_per_inch;     // 10in in mm
 panel_thickness = 18;                 // Typical plywood thickness (18mm)
 
@@ -34,10 +35,10 @@ angle_indicator_length = 30;             // Length in mm (3cm)
 angle_indicator_width = 1.5;             // Width in mm (line thickness)
 
 // Column spacings as per the guide
-// Columns are 10cm apart, with 22.4cm from edge to first column (C1)
-col_edge_margin = 22.4 * mm_per_cm;      // 22.4cm from left edge to C1
+// Columns are 10cm apart, centered layout for 31 columns
+col_edge_margin = 25 * mm_per_cm;        // 25cm from left edge to C1 (centered)
 col_spacing = 10 * mm_per_cm;            // 10cm between columns
-col_count = 27;
+col_count = 31;                          // Total columns (2 extra left, 2 extra right)
 
 // Row spacings and margins
 row_spacing = 10 * mm_per_cm;            // 10cm between rows
@@ -161,18 +162,24 @@ module horizontal_bolt_pattern_2d(col, row) {
         translate([-horizontal_led_spacing, 0]) led_hole_2d();
         translate([horizontal_led_spacing, 0]) led_hole_2d();
         
-        // Angle indicator and text - position text further away to avoid overlap
-        translate([5 * mm_per_cm, 0]) {
-            engrave_hold_id_2d(col, row, true);
+        // Only add markings for columns 3-29 (the Kilter pattern)
+        if (col >= 3 && col <= 29) {
+            // Angle indicator and text - position text further away to avoid overlap
+            translate([5 * mm_per_cm, 0]) {
+                // Map display column to data column (col 3 -> 1, col 4 -> 2, etc.)
+                data_col = col - 2;
+                engrave_hold_id_2d(data_col, row, true);
+            }
+            
+            // Add the angle indicator at the t-nut hole
+            // Map display column to data column for angle lookup
+            data_col = col - 2;
+            angle = get_angle(data_col, row, true);
+            
+            // Convert angle to proper rotation with error handling
+            rotate(convert_angle(angle))
+            angle_indicator_2d();
         }
-        
-        // Add the angle indicator at the t-nut hole
-        // Pass row directly to get_angle
-        angle = get_angle(col, row, true);
-        
-        // Convert angle to proper rotation with error handling
-        rotate(convert_angle(angle))
-        angle_indicator_2d();
     }
 }
 
@@ -189,18 +196,24 @@ module vertical_bolt_pattern_2d(col, row) {
         translate([0, vertical_led_spacing]) led_hole_2d();
         translate([0, -vertical_led_spacing]) led_hole_2d();
         
-        // Angle indicator and text - position text further away to avoid overlap
-        translate([5 * mm_per_cm, 0]) {
-            engrave_hold_id_2d(col, row, false);
+        // Only add markings for columns 3-29 (the Kilter pattern)
+        if (col >= 3 && col <= 29) {
+            // Angle indicator and text - position text further away to avoid overlap
+            translate([5 * mm_per_cm, 0]) {
+                // Map display column to data column (col 3 -> 1, col 4 -> 2, etc.)
+                data_col = col - 2;
+                engrave_hold_id_2d(data_col, row, false);
+            }
+            
+            // Add the angle indicator at the t-nut hole
+            // Map display column to data column for angle lookup
+            data_col = col - 2;
+            angle = get_angle(data_col, row, false);
+            
+            // Convert angle to proper rotation with error handling
+            rotate(convert_angle(angle))
+            angle_indicator_2d();
         }
-        
-        // Add the angle indicator at the t-nut hole
-        // Pass row directly to get_angle
-        angle = get_angle(col, row, false);
-        
-        // Convert angle to proper rotation with error handling
-        rotate(convert_angle(angle))
-        angle_indicator_2d();
     }
 }
 
@@ -223,7 +236,7 @@ module full_climbing_wall_2d() {
         // Generate all holds
         
         // Generate horizontal patterns (even columns with odd rows)
-        for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]) {
+        for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]) {
             // For even columns, use odd rows
             for (row = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]) {
                 horizontal_bolt_pattern_2d(col, row);
@@ -232,7 +245,7 @@ module full_climbing_wall_2d() {
         }
         
         // Generate vertical patterns (odd columns with even rows)
-        for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27]) {
+        for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]) {
             // For odd columns, use even rows
             for (row = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34]) {
                 vertical_bolt_pattern_2d(col, row);
@@ -242,38 +255,78 @@ module full_climbing_wall_2d() {
     }
 }
 
-// Function to determine if a row position fits within a panel's vertical range
-function row_fits_in_panel(row_num, panel_num) =
+// Function to determine which panel (1-6) a position belongs to
+// Panel layout:
+// Bottom row: Panel 1 (left, small), Panel 2 (right, large)
+// Middle row: Panel 3 (left, large), Panel 4 (right, small)
+// Top row: Panel 5 (left, small), Panel 6 (right, large)
+function get_panel_for_position(col, row_num) =
     let(
+        x = col_pos(col),
         y = row_pos(row_num),
-        panel_bottom = (panel_num - 1) * panel_height,
-        panel_top = panel_num * panel_height,
-        fits = (y >= panel_bottom && y < panel_top),
-        debug = fits ? echo(str("Panel ", panel_num, " includes row ", row_num, " at y=", y, "mm")) : undef
+        // Determine row (1=bottom, 2=middle, 3=top)
+        row_index = floor(y / panel_height) + 1,
+        // Panel boundaries for alternating layout
+        is_bottom_row = (row_index == 1),
+        is_middle_row = (row_index == 2),
+        is_top_row = (row_index == 3),
+        // Left/right boundary changes based on row
+        left_boundary = is_middle_row ? half_panel_width : 0,
+        right_boundary = is_middle_row ? full_width : half_panel_width,
+        // Determine if position is in left or right panel
+        is_left = (x < (is_middle_row ? panel_width : half_panel_width)),
+        // Calculate panel number
+        panel_num = is_bottom_row ? (is_left ? 1 : 2) :
+                   is_middle_row ? (is_left ? 3 : 4) :
+                   is_top_row ? (is_left ? 5 : 6) : 0
     )
-    fits;
+    panel_num;
+
+// Function to determine if a position fits within a specific panel
+function position_fits_in_panel(col, row_num, panel_num) =
+    get_panel_for_position(col, row_num) == panel_num;
 
 // Individual panel module (for CNC cutting)
+// Panel numbering:
+// 1: Bottom left (small), 2: Bottom right (large)
+// 3: Middle left (large), 4: Middle right (small)
+// 5: Top left (small), 6: Top right (large)
 module panel_2d(panel_num) {
+    // Determine panel dimensions based on number
+    p_width = (panel_num == 1 || panel_num == 4 || panel_num == 5) ? half_panel_width : panel_width;
+    p_height = panel_height;
+    
+    // Calculate panel offsets for positioning holes correctly
+    x_offset = (panel_num == 2) ? half_panel_width :
+               (panel_num == 4) ? panel_width :
+               (panel_num == 6) ? half_panel_width : 0;
+    y_offset = (panel_num <= 2) ? 0 :
+               (panel_num <= 4) ? panel_height :
+               panel_height * 2;
+    
     difference() {
         // Panel outline
-        square([panel_width, panel_height]);
+        square([p_width, p_height]);
         
         // Generate horizontal patterns (even columns with odd rows)
-        for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]) {
+        for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]) {
             // Check all possible rows
             for (row = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]) {
-                if (row_fits_in_panel(row, panel_num)) {
+                if (position_fits_in_panel(col, row, panel_num)) {
+                    // Translate to local panel coordinates
+                    translate([-x_offset, -y_offset])
                     horizontal_bolt_pattern_2d(col, row);
                 }
             }
         }
         
         // Generate vertical patterns (odd columns with even rows)
-        for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27]) {
+        for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]) {
             // Check all possible rows
             for (row = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34]) {
-                if (row_fits_in_panel(row, panel_num)) {
+                if (position_fits_in_panel(col, row, panel_num)) {
+                    // Translate to local panel coordinates
+                    translate([-x_offset, -y_offset])
                     vertical_bolt_pattern_2d(col, row);
                 }
             }
@@ -296,15 +349,23 @@ module kicker_2d() {
 
 // Drill holes only (t-nut and LED holes)
 module panel_drill_only(panel_num) {
+    // Calculate panel offsets
+    x_offset = (panel_num == 2) ? half_panel_width :
+               (panel_num == 4) ? panel_width :
+               (panel_num == 6) ? half_panel_width : 0;
+    y_offset = (panel_num <= 2) ? 0 :
+               (panel_num <= 4) ? panel_height :
+               panel_height * 2;
+    
     // Generate horizontal patterns (even columns with odd rows)
-    for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]) {
+    for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]) {
         // Check all possible rows
         for (row = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]) {
-            if (row_fits_in_panel(row, panel_num)) {
+            if (position_fits_in_panel(col, row, panel_num)) {
                 x = col_pos(col);
                 y = row_pos(row);
                 
-                translate([x, y - (panel_num - 1) * panel_height]) {
+                translate([x - x_offset, y - y_offset]) {
                     // T-nut hole
                     color("red") t_nut_hole_2d();
                     
@@ -317,14 +378,14 @@ module panel_drill_only(panel_num) {
     }
     
     // Generate vertical patterns (odd columns with even rows)
-    for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27]) {
+    for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]) {
         // Check all possible rows
         for (row = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34]) {
-            if (row_fits_in_panel(row, panel_num)) {
+            if (position_fits_in_panel(col, row, panel_num)) {
                 x = col_pos(col);
                 y = row_pos(row);
                 
-                translate([x, y - (panel_num - 1) * panel_height]) {
+                translate([x - x_offset, y - y_offset]) {
                     // T-nut hole
                     color("red") t_nut_hole_2d();
                     
@@ -339,22 +400,32 @@ module panel_drill_only(panel_num) {
 
 // Engrave text and angle indicators only
 module panel_engrave_only(panel_num) {
+    // Calculate panel offsets
+    x_offset = (panel_num == 2) ? half_panel_width :
+               (panel_num == 4) ? panel_width :
+               (panel_num == 6) ? half_panel_width : 0;
+    y_offset = (panel_num <= 2) ? 0 :
+               (panel_num <= 4) ? panel_height :
+               panel_height * 2;
+    
     // Generate horizontal patterns (even columns with odd rows)
-    for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]) {
+    for (col = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]) {
         // Check all possible rows
         for (row = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35]) {
-            if (row_fits_in_panel(row, panel_num)) {
+            if (position_fits_in_panel(col, row, panel_num) && col >= 3 && col <= 29) {
                 x = col_pos(col);
                 y = row_pos(row);
                 
-                translate([x, y - (panel_num - 1) * panel_height]) {
+                translate([x - x_offset, y - y_offset]) {
                     // Angle indicator and text - position text further away to avoid overlap
                     translate([5 * mm_per_cm, 0]) {
-                        color("blue") engrave_hold_id_2d(col, row, true);
+                        data_col = col - 2;
+                        color("blue") engrave_hold_id_2d(data_col, row, true);
                     }
                     
                     // Add the angle indicator at the t-nut hole
-                    angle = get_angle(col, row, true);
+                    data_col = col - 2;
+                    angle = get_angle(data_col, row, true);
                     
                     // Convert angle to proper rotation with error handling
                     color("blue") rotate(convert_angle(angle))
@@ -365,21 +436,23 @@ module panel_engrave_only(panel_num) {
     }
     
     // Generate vertical patterns (odd columns with even rows)
-    for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27]) {
+    for (col = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]) {
         // Check all possible rows
         for (row = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34]) {
-            if (row_fits_in_panel(row, panel_num)) {
+            if (position_fits_in_panel(col, row, panel_num) && col >= 3 && col <= 29) {
                 x = col_pos(col);
                 y = row_pos(row);
                 
-                translate([x, y - (panel_num - 1) * panel_height]) {
+                translate([x - x_offset, y - y_offset]) {
                     // Angle indicator and text - position text further away to avoid overlap
                     translate([5 * mm_per_cm, 0]) {
-                        color("blue") engrave_hold_id_2d(col, row, false);
+                        data_col = col - 2;
+                        color("blue") engrave_hold_id_2d(data_col, row, false);
                     }
                     
                     // Add the angle indicator at the t-nut hole
-                    angle = get_angle(col, row, false);
+                    data_col = col - 2;
+                    angle = get_angle(data_col, row, false);
                     
                     // Convert angle to proper rotation with error handling
                     color("blue") rotate(convert_angle(angle))
@@ -392,12 +465,28 @@ module panel_engrave_only(panel_num) {
 
 // Reference outline only
 module panel_outline_only(panel_num) {
-    // Panel outline
-    color("green") square([panel_width, panel_height]);
+    // Determine panel dimensions
+    p_width = (panel_num == 1 || panel_num == 4 || panel_num == 5) ? half_panel_width : panel_width;
+    p_height = panel_height;
     
-    // Add panel number label for reference
-    color("green") translate([panel_width/2, panel_height/2])
-    text(str("PANEL ", panel_num), size=50, halign="center", valign="center");
+    // Panel outline
+    color("green") square([p_width, p_height]);
+    
+    // Add panel number and position label for reference
+    position = (panel_num == 1) ? "BOTTOM LEFT" :
+               (panel_num == 2) ? "BOTTOM RIGHT" :
+               (panel_num == 3) ? "MIDDLE LEFT" :
+               (panel_num == 4) ? "MIDDLE RIGHT" :
+               (panel_num == 5) ? "TOP LEFT" :
+               "TOP RIGHT";
+    
+    color("green") translate([p_width/2, p_height/2]) {
+        text(str("PANEL ", panel_num), size=50, halign="center", valign="center");
+        translate([0, -60])
+        text(position, size=30, halign="center", valign="center");
+        translate([0, -100])
+        text(str(p_width, " x ", p_height, " mm"), size=25, halign="center", valign="center");
+    }
 }
 
 // Uncomment the section you want to render for CNC
@@ -417,7 +506,7 @@ module panel_outline_only(panel_num) {
 //panel_2d(3);
 
 // === SEPARATE OPERATIONS (for multi-file approach) ===
-// Panel 1 - Drilling operations only
+// Panel 1 (Bottom Left - 1220mm) - Drilling operations only
 panel_drill_only(1);
 
 // Panel 1 - Engraving operations only
@@ -426,7 +515,7 @@ panel_drill_only(1);
 // Panel 1 - Outline only
 //panel_outline_only(1);
 
-// Panel 2 - Drilling operations only
+// Panel 2 (Bottom Right - 2440mm) - Drilling operations only
 //panel_drill_only(2);
 
 // Panel 2 - Engraving operations only
@@ -435,7 +524,7 @@ panel_drill_only(1);
 // Panel 2 - Outline only
 //panel_outline_only(2);
 
-// Panel 3 - Drilling operations only
+// Panel 3 (Middle Left - 2440mm) - Drilling operations only
 //panel_drill_only(3);
 
 // Panel 3 - Engraving operations only
@@ -444,17 +533,49 @@ panel_drill_only(1);
 // Panel 3 - Outline only
 //panel_outline_only(3);
 
+// Panel 4 (Middle Right - 1220mm) - Drilling operations only
+//panel_drill_only(4);
+
+// Panel 4 - Engraving operations only
+//panel_engrave_only(4);
+
+// Panel 4 - Outline only
+//panel_outline_only(4);
+
+// Panel 5 (Top Left - 1220mm) - Drilling operations only
+//panel_drill_only(5);
+
+// Panel 5 - Engraving operations only
+//panel_engrave_only(5);
+
+// Panel 5 - Outline only
+//panel_outline_only(5);
+
+// Panel 6 (Top Right - 2440mm) - Drilling operations only
+//panel_drill_only(6);
+
+// Panel 6 - Engraving operations only
+//panel_engrave_only(6);
+
+// Panel 6 - Outline only
+//panel_outline_only(6);
+
 // Render Kicker (separate panel)
 //kicker_2d();
 
 // Display dimensions
 echo("FULL CLIMBING WALL WIDTH (mm):", full_width);
 echo("FULL CLIMBING WALL HEIGHT (mm):", full_height);
-echo("PANEL WIDTH (mm):", panel_width);
+echo("FULL PANEL WIDTH (mm):", panel_width);
+echo("HALF PANEL WIDTH (mm):", half_panel_width);
 echo("PANEL HEIGHT (mm):", panel_height);
+echo("TOTAL PANELS:", 6);
 echo("KICKER HEIGHT (mm):", kicker_height);
 echo("T-NUT HOLE SIZE (mm):", t_nut_hole_diameter);
 echo("LED HOLE SIZE (mm):", led_hole_diameter);
+echo("TOTAL COLUMNS:", col_count);
+echo("KILTER PATTERN COLUMNS:", "3-29");
+echo("EXTRA COLUMNS (no markings):", "1-2, 30-31");
 
 // Export instructions:
 // This model now supports a multi-file approach for better layer management in LibreCAD:
